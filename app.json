@@ -1,0 +1,22 @@
+{
+  "expo": {
+    "name": "Unforget",
+    "slug": "unforget",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/logo.png",
+    "scheme": "unforget",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "plugins": ["expo-router"],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "edgeToEdgeEnabled": true
+    }
+  }
+}
