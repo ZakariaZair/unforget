@@ -1,6 +1,6 @@
 # Unforget — Developer Guide
 
-Unforget is a client-only mobile application built with React Native, TypeScript, Expo, and Expo Router. There is no server in this project. Personal advice and scheduling data will remain on the device when persistence is added.
+Unforget is a client-only mobile application built with React Native, TypeScript, Expo, and Expo Router. There is no server in this project. Personal advice and notification scheduling data remain on the device.
 
 ## Requirements
 
@@ -50,10 +50,15 @@ unforget/
 │       ├── _layout.tsx        # Tab names and tab-bar configuration
 │       ├── index.tsx          # Remember tab and initial page
 │       └── archive.tsx        # Archive tab
+├── lib/
+│   ├── advice-storage.ts      # AsyncStorage persistence
+│   └── notifications.ts       # Local notification scheduling
+├── providers/
+│   └── AdviceProvider.tsx     # Shared advice state and save flow
+├── types/
+│   └── advice.ts              # Stored advice data model
 ├── assets/
 │   └── logo.png               # Brand and application icon
-├── components/
-│   └── AdviceCard.tsx         # Reusable presentation component
 ├── app.json                   # Expo application configuration
 ├── package.json               # Dependencies and scripts
 └── tsconfig.json              # TypeScript configuration
