@@ -2,7 +2,7 @@
   "expo": {
     "name": "Unforget",
     "slug": "unforget",
-    "version": "0.1.0",
+    "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/logo.png",
     "scheme": "unforget",
@@ -15,8 +15,18 @@
       "typedRoutes": true
     },
     "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "com.zakaroche.unforget"
-    }
+      "supportsTablet": false,
+      "bundleIdentifier": "com.zakaroche.unforget",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "d20f14e6-0c90-4538-a20d-bfd741a0ca11"
+      }
+    },
+    "owner": "zakaroche"
   }
 }

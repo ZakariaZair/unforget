@@ -13,7 +13,11 @@ import {
   NotificationScheduleResult,
   syncRandomNotifications,
 } from '../lib/notifications';
-import { Advice } from '../types/advice';
+import {
+  Advice,
+  MAX_ADVICE_COUNT,
+  MAX_ADVICE_LENGTH,
+} from '../types/advice';
 
 type AddAdviceResult = {
   notificationResult: NotificationScheduleResult | 'error';
@@ -22,6 +26,8 @@ type AddAdviceResult = {
 type AdviceContextValue = {
   advice: Advice[];
   addAdvice: (text: string) => Promise<AddAdviceResult>;
+  clearAdvice: () => Promise<void>;
+  deleteAdvice: (id: string) => Promise<void>;
   isLoading: boolean;
 };
 
@@ -30,6 +36,13 @@ type AdviceProviderProps = {
 };
 
 const AdviceContext = createContext<AdviceContextValue | null>(null);
+
+export class AdviceLimitError extends Error {
+  constructor() {
+    super(`You can save up to ${MAX_ADVICE_COUNT} pieces of advice.`);
+    this.name = 'AdviceLimitError';
+  }
+}
 
 function createAdvice(text: string): Advice {
   return {
@@ -81,8 +94,17 @@ export function AdviceProvider({ children }: AdviceProviderProps) {
     async (text: string): Promise<AddAdviceResult> => {
       const normalizedText = text.trim();
 
-      if (normalizedText.length === 0 || normalizedText.length > 100) {
-        throw new Error('Advice must contain between 1 and 100 characters.');
+      if (
+        normalizedText.length === 0 ||
+        normalizedText.length > MAX_ADVICE_LENGTH
+      ) {
+        throw new Error(
+          `Advice must contain between 1 and ${MAX_ADVICE_LENGTH} characters.`,
+        );
+      }
+
+      if (advice.length >= MAX_ADVICE_COUNT) {
+        throw new AdviceLimitError();
       }
 
       const nextAdvice = [createAdvice(normalizedText), ...advice];
@@ -101,9 +123,46 @@ export function AdviceProvider({ children }: AdviceProviderProps) {
     [advice],
   );
 
+  const deleteAdvice = useCallback(
+    async (id: string): Promise<void> => {
+      const nextAdvice = advice.filter((item) => item.id !== id);
+
+      if (nextAdvice.length === advice.length) {
+        return;
+      }
+
+      await saveAdvice(nextAdvice);
+      setAdvice(nextAdvice);
+
+      try {
+        await syncRandomNotifications(nextAdvice, false);
+      } catch (error) {
+        console.warn(
+          'Advice was deleted, but notifications could not be refreshed.',
+          error,
+        );
+      }
+    },
+    [advice],
+  );
+
+  const clearAdvice = useCallback(async (): Promise<void> => {
+    await saveAdvice([]);
+    setAdvice([]);
+
+    try {
+      await syncRandomNotifications([], false);
+    } catch (error) {
+      console.warn(
+        'Advice was cleared, but notifications could not be cancelled.',
+        error,
+      );
+    }
+  }, []);
+
   const value = useMemo(
-    () => ({ advice, addAdvice, isLoading }),
-    [advice, addAdvice, isLoading],
+    () => ({ advice, addAdvice, clearAdvice, deleteAdvice, isLoading }),
+    [advice, addAdvice, clearAdvice, deleteAdvice, isLoading],
   );
 
   return <AdviceContext.Provider value={value}>{children}</AdviceContext.Provider>;

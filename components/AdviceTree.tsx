@@ -9,135 +9,217 @@ import {
   View,
 } from 'react-native';
 
-import { colors } from '../constants/theme';
+import { colors, fonts } from '../constants/theme';
 
-const TREE_HEIGHT = 220;
+export const ADVICE_TREE_HEIGHT = 276;
+const TREE_SEED = Math.floor(Math.random() * 2_147_483_646) + 1;
 
 type Branch = {
   angle: number;
   delay: number;
+  isTerminal: boolean;
   length: number;
   thickness: number;
   x: number;
   y: number;
 };
 
-type Leaf = {
+type Tree = {
+  branches: Branch[];
+};
+
+type GrowthNode = {
   angle: number;
-  delay: number;
+  children: number;
+  depth: number;
+  firstTurn: -1 | 1;
+  length: number;
   x: number;
   y: number;
 };
 
-type Tree = {
-  branches: Branch[];
-  leaves: Leaf[];
-};
+function createRandom(seed: number) {
+  let state = seed % 2_147_483_647;
 
-let hasPlayedTreeAnimation = false;
+  return () => {
+    state = (state * 16_807) % 2_147_483_647;
+    return (state - 1) / 2_147_483_646;
+  };
+}
 
-function randomBetween(minimum: number, maximum: number) {
-  return minimum + Math.random() * (maximum - minimum);
+function randomBetween(random: () => number, minimum: number, maximum: number) {
+  return minimum + random() * (maximum - minimum);
 }
 
 function clampAngle(angle: number) {
   return Math.max(5, Math.min(175, angle));
 }
 
-function createTree(width: number): Tree {
+function createTree(width: number, adviceCount: number): Tree {
   const branches: Branch[] = [];
-  const leaves: Leaf[] = [];
+  const nodes: GrowthNode[] = [];
+  const random = createRandom(TREE_SEED);
+  const targetTipCount = Math.max(0, Math.floor(adviceCount));
   const centerX = width / 2;
-  const junctionY = 84;
+  const lowerBoundary = ADVICE_TREE_HEIGHT - 18;
 
-  branches.push({
-    angle: 90,
-    delay: 260,
-    length: 32,
-    thickness: 3,
-    x: centerX,
-    y: 52,
-  });
-
-  function growBranch(
+  function addBranch(
+    parent: GrowthNode | null,
     x: number,
     y: number,
     length: number,
     angle: number,
-    generationsRemaining: number,
+    depth: number,
     delay: number,
   ) {
-    const constrainedAngle = clampAngle(angle);
-    const radians = (constrainedAngle * Math.PI) / 180;
-    const endX = x + Math.cos(radians) * length;
-    const endY = y + Math.sin(radians) * length;
+    let constrainedAngle = clampAngle(angle);
+    let radians = (constrainedAngle * Math.PI) / 180;
+    let endX = x + Math.cos(radians) * length;
+    let endY = y + Math.sin(radians) * length;
+
+    if (endX < 14) {
+      constrainedAngle = randomBetween(random, 18, 68);
+    } else if (endX > width - 14) {
+      constrainedAngle = randomBetween(random, 112, 162);
+    }
+
+    if (endY > lowerBoundary) {
+      constrainedAngle =
+        x < centerX
+          ? randomBetween(random, 6, 24)
+          : randomBetween(random, 156, 174);
+    }
+
+    radians = (constrainedAngle * Math.PI) / 180;
+    endX = x + Math.cos(radians) * length;
+    endY = y + Math.sin(radians) * length;
 
     branches.push({
       angle: constrainedAngle,
       delay,
+      isTerminal: false,
       length,
-      thickness: 1.45 + generationsRemaining * 0.45,
+      thickness: Math.max(1.25, 3 - depth * 0.36),
       x,
       y,
     });
 
-    if (generationsRemaining === 0) {
-      leaves.push({
-        angle: constrainedAngle + randomBetween(-24, 24),
-        delay: delay + 560,
-        x: endX,
-        y: endY,
-      });
-      return;
+    if (parent) {
+      parent.children += 1;
     }
 
-    const nextLength = length * randomBetween(0.66, 0.76);
-    const spread = randomBetween(25, 38);
-    const nextDelay = delay + randomBetween(300, 390);
+    const node: GrowthNode = {
+      angle: constrainedAngle,
+      children: 0,
+      depth,
+      firstTurn:
+        constrainedAngle < 78
+          ? 1
+          : constrainedAngle > 102
+            ? -1
+            : random() > 0.5
+              ? 1
+              : -1,
+      length,
+      x: endX,
+      y: endY,
+    };
 
-    growBranch(
-      endX,
-      endY,
-      nextLength,
-      constrainedAngle - spread + randomBetween(-6, 6),
-      generationsRemaining - 1,
-      nextDelay,
-    );
-    growBranch(
-      endX,
-      endY,
-      nextLength,
-      constrainedAngle + spread + randomBetween(-6, 6),
-      generationsRemaining - 1,
-      nextDelay + randomBetween(45, 120),
-    );
+    nodes.push(node);
+    return node;
   }
 
-  growBranch(centerX, junctionY, 54, randomBetween(18, 31), 2, 560);
-  growBranch(centerX, junctionY, 54, randomBetween(149, 162), 2, 610);
-  growBranch(centerX, junctionY, 46, randomBetween(82, 98), 1, 700);
+  if (targetTipCount === 0) {
+    return { branches };
+  }
 
-  return { branches, leaves };
+  const trunk = addBranch(null, centerX, 62, 43, 90, 0, 260);
+  const candidates: GrowthNode[] = [];
+  const rightAngle = randomBetween(random, 18, 31);
+  const leftAngle = randomBetween(random, 149, 162);
+  const centerAngle = randomBetween(random, 82, 98);
+  const mainAngles =
+    targetTipCount === 1
+      ? [centerAngle]
+      : targetTipCount === 2
+        ? [rightAngle, leftAngle]
+        : [rightAngle, leftAngle, centerAngle];
+
+  for (const angle of mainAngles) {
+    const branch = addBranch(
+      trunk,
+      trunk.x,
+      trunk.y,
+      angle > 75 && angle < 105 ? 56 : 66,
+      angle,
+      1,
+      560 + candidates.length * 70,
+    );
+    candidates.push(branch);
+  }
+
+  let terminalTipCount = candidates.length;
+
+  while (terminalTipCount < targetTipCount) {
+    const parent = candidates.shift() ?? trunk;
+    const spread = randomBetween(random, 24, 37);
+    const nextLength = Math.max(
+      12,
+      parent.length * randomBetween(random, 0.65, 0.76),
+    );
+    const nextDelay =
+      540 + parent.depth * 320 + branches.length * 22 + randomBetween(random, 0, 90);
+    const firstBranch = addBranch(
+      parent,
+      parent.x,
+      parent.y,
+      nextLength,
+      parent.angle + parent.firstTurn * spread + randomBetween(random, -6, 6),
+      parent.depth + 1,
+      nextDelay,
+    );
+    const secondBranch = addBranch(
+      parent,
+      parent.x,
+      parent.y,
+      nextLength * randomBetween(random, 0.9, 1.04),
+      parent.angle - parent.firstTurn * spread + randomBetween(random, -6, 6),
+      parent.depth + 1,
+      nextDelay + randomBetween(random, 45, 110),
+    );
+
+    if (random() > 0.5) {
+      candidates.push(firstBranch, secondBranch);
+    } else {
+      candidates.push(secondBranch, firstBranch);
+    }
+    terminalTipCount += 1;
+  }
+
+  nodes.forEach((node, index) => {
+    branches[index].isTerminal = node.children === 0;
+  });
+
+  return { branches };
 }
 
-export function AdviceTree() {
+type AdviceTreeProps = {
+  adviceCount: number;
+};
+
+export function AdviceTree({ adviceCount }: AdviceTreeProps) {
   const { width: windowWidth } = useWindowDimensions();
   const width = Math.min(Math.max(windowWidth - 48, 280), 440);
   const tree = useRef<Tree | null>(null);
 
   if (!tree.current) {
-    tree.current = createTree(width);
+    tree.current = createTree(width, adviceCount);
   }
 
   const branches = tree.current.branches;
-  const leaves = tree.current.leaves;
-  const shouldAnimate = useRef(!hasPlayedTreeAnimation).current;
-  const logoProgress = useRef(new Animated.Value(shouldAnimate ? 0 : 1)).current;
+  const logoProgress = useRef(new Animated.Value(0)).current;
   const branchProgress = useRef(
-    branches.map(() => new Animated.Value(shouldAnimate ? 0 : 1)),
-  ).current;
-  const leafProgress = useRef(
-    leaves.map(() => new Animated.Value(shouldAnimate ? 0 : 1)),
+    branches.map(() => new Animated.Value(0)),
   ).current;
 
   useEffect(() => {
@@ -151,15 +233,12 @@ export function AdviceTree() {
         return;
       }
 
-      if (!shouldAnimate || reduceMotion) {
+      if (reduceMotion) {
         logoProgress.setValue(1);
         branchProgress.forEach((progress) => progress.setValue(1));
-        leafProgress.forEach((progress) => progress.setValue(1));
-        hasPlayedTreeAnimation = true;
         return;
       }
 
-      hasPlayedTreeAnimation = true;
       treeAnimation = Animated.parallel([
         Animated.spring(logoProgress, {
           toValue: 1,
@@ -177,18 +256,6 @@ export function AdviceTree() {
             useNativeDriver: true,
           }),
         ),
-        ...leaves.map((leaf, index) =>
-          Animated.sequence([
-            Animated.delay(leaf.delay),
-            Animated.spring(leafProgress[index], {
-              toValue: 1,
-              damping: 9,
-              stiffness: 170,
-              mass: 0.65,
-              useNativeDriver: true,
-            }),
-          ]),
-        ),
       ]);
 
       treeAnimation.start();
@@ -200,11 +267,15 @@ export function AdviceTree() {
       isMounted = false;
       treeAnimation?.stop();
     };
-  }, [branchProgress, branches, leafProgress, leaves, logoProgress, shouldAnimate]);
+  }, [branchProgress, branches, logoProgress]);
 
   const logoScale = logoProgress.interpolate({
     inputRange: [0, 1],
     outputRange: [0.78, 1],
+  });
+  const emptyTextOpacity = logoProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 0.34],
   });
 
   return (
@@ -232,32 +303,23 @@ export function AdviceTree() {
               ],
             },
           ]}
-        />
-      ))}
-
-      {leaves.map((leaf, index) => (
-        <Animated.View
-          key={`leaf-${index}`}
-          style={[
-            styles.leaf,
-            {
-              left: leaf.x - 4,
-              opacity: leafProgress[index],
-              top: leaf.y - 6,
-              transform: [
-                { rotateZ: `${leaf.angle}deg` },
-                { scale: leafProgress[index] },
-              ],
-            },
-          ]}
-        />
+        >
+          {branch.isTerminal ? (
+            <>
+              <View style={styles.branchCore} />
+              <View style={styles.branchFade} />
+            </>
+          ) : (
+            <View style={styles.branchSolid} />
+          )}
+        </Animated.View>
       ))}
 
       <Animated.View
         style={[
           styles.logoContainer,
           {
-            left: width / 2 - 46,
+            left: width / 2 - 52,
             opacity: logoProgress,
             transform: [{ scale: logoScale }],
           },
@@ -269,6 +331,12 @@ export function AdviceTree() {
           style={styles.logo}
         />
       </Animated.View>
+
+      {adviceCount === 0 ? (
+        <Animated.Text style={[styles.emptyText, { opacity: emptyTextOpacity }]}>
+          No advice yet
+        </Animated.Text>
+      ) : null}
     </View>
   );
 }
@@ -276,30 +344,54 @@ export function AdviceTree() {
 const styles = StyleSheet.create({
   container: {
     position: 'relative',
-    height: TREE_HEIGHT,
+    height: ADVICE_TREE_HEIGHT,
     alignSelf: 'center',
   },
   branch: {
     position: 'absolute',
     borderRadius: 2,
+  },
+  branchSolid: {
+    flex: 1,
+    borderRadius: 2,
     backgroundColor: colors.ink,
   },
-  leaf: {
+  branchCore: {
     position: 'absolute',
-    width: 9,
-    height: 14,
-    borderTopLeftRadius: 9,
-    borderBottomRightRadius: 9,
-    backgroundColor: colors.accent,
+    top: 0,
+    bottom: 0,
+    left: 0,
+    width: '70%',
+    borderRadius: 2,
+    backgroundColor: colors.ink,
+  },
+  branchFade: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: '70%',
+    experimental_backgroundImage: `linear-gradient(90deg, ${colors.ink} 0%, transparent 100%)`,
   },
   logoContainer: {
     position: 'absolute',
-    top: -12,
-    width: 92,
-    height: 92,
+    top: -10,
+    width: 104,
+    height: 104,
   },
   logo: {
     width: '100%',
     height: '100%',
+  },
+  emptyText: {
+    position: 'absolute',
+    top: 112,
+    right: 0,
+    left: 0,
+    color: colors.ink,
+    fontFamily: fonts.bodyMedium,
+    fontSize: 12,
+    letterSpacing: 0.1,
+    textAlign: 'center',
   },
 });

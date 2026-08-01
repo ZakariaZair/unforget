@@ -1,5 +1,14 @@
-import { useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useRef, useState } from 'react';
+import {
+  Animated,
+  Alert,
+  FlatList,
+  PanResponder,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { colors, fonts } from '../../constants/theme';
@@ -7,25 +16,7 @@ import { scheduleTestNotification } from '../../lib/notifications';
 import { useAdvice } from '../../providers/AdviceProvider';
 import { Advice } from '../../types/advice';
 
-const DAY_IN_MILLISECONDS = 24 * 60 * 60 * 1000;
-
-const PREVIEW_ADVICE: Advice[] = [
-  {
-    id: 'preview-attention',
-    text: 'Protect your attention; it becomes your life.',
-    createdAt: new Date(Date.now() - 2 * DAY_IN_MILLISECONDS).toISOString(),
-  },
-  {
-    id: 'preview-courage',
-    text: 'Ask the question, even when your voice shakes.',
-    createdAt: new Date(Date.now() - 8 * DAY_IN_MILLISECONDS).toISOString(),
-  },
-  {
-    id: 'preview-rest',
-    text: 'Rest is part of the work, not a reward for finishing it.',
-    createdAt: new Date(Date.now() - 15 * DAY_IN_MILLISECONDS).toISOString(),
-  },
-];
+const DELETE_ACTION_WIDTH = 88;
 
 function formatAdviceDate(date: string): string {
   return new Date(date).toLocaleDateString(undefined, {
@@ -35,14 +26,122 @@ function formatAdviceDate(date: string): string {
   });
 }
 
+type SwipeableRowHandle = {
+  close: () => void;
+};
+
+type AdviceRowProps = {
+  canDelete: boolean;
+  index: number;
+  item: Advice;
+  onDelete: (id: string) => void;
+  onOpen: (handle: SwipeableRowHandle) => void;
+};
+
+function AdviceRow({
+  canDelete,
+  index,
+  item,
+  onDelete,
+  onOpen,
+}: AdviceRowProps) {
+  const translateX = useRef(new Animated.Value(0)).current;
+  const gestureStartX = useRef(0);
+  const isOpen = useRef(false);
+
+  const close = useCallback(() => {
+    isOpen.current = false;
+    Animated.spring(translateX, {
+      bounciness: 0,
+      speed: 24,
+      toValue: 0,
+      useNativeDriver: true,
+    }).start();
+  }, [translateX]);
+
+  const open = useCallback(() => {
+    isOpen.current = true;
+    onOpen({ close });
+    Animated.spring(translateX, {
+      bounciness: 0,
+      speed: 24,
+      toValue: -DELETE_ACTION_WIDTH,
+      useNativeDriver: true,
+    }).start();
+  }, [close, onOpen, translateX]);
+
+  const panResponder = PanResponder.create({
+    onMoveShouldSetPanResponder: (_event, gesture) =>
+      canDelete &&
+      Math.abs(gesture.dx) > 8 &&
+      Math.abs(gesture.dx) > Math.abs(gesture.dy),
+    onPanResponderGrant: () => {
+      translateX.stopAnimation();
+      gestureStartX.current = isOpen.current ? -DELETE_ACTION_WIDTH : 0;
+    },
+    onPanResponderMove: (_event, gesture) => {
+      const nextX = Math.max(
+        -DELETE_ACTION_WIDTH,
+        Math.min(0, gestureStartX.current + gesture.dx),
+      );
+      translateX.setValue(nextX);
+    },
+    onPanResponderRelease: (_event, gesture) => {
+      const nextX = gestureStartX.current + gesture.dx;
+
+      if (nextX < -DELETE_ACTION_WIDTH / 2 || gesture.vx < -0.4) {
+        open();
+      } else {
+        close();
+      }
+    },
+    onPanResponderTerminate: close,
+  });
+
+  return (
+    <View style={styles.swipeContainer}>
+      {canDelete ? (
+        <Pressable
+          accessibilityLabel={`Delete ${item.text}`}
+          accessibilityRole="button"
+          onPress={() => {
+            close();
+            onDelete(item.id);
+          }}
+          style={({ pressed }) => [
+            styles.deleteAction,
+            pressed && styles.deleteActionPressed,
+          ]}
+        >
+          <Text style={styles.deleteActionText}>Delete</Text>
+        </Pressable>
+      ) : null}
+
+      <Animated.View
+        style={{ transform: [{ translateX }] }}
+        {...(canDelete ? panResponder.panHandlers : {})}
+      >
+        <View style={styles.adviceRow}>
+          <Text style={styles.rowNumber}>
+            {(index + 1).toString().padStart(2, '0')}
+          </Text>
+          <Text style={styles.adviceText}>{item.text}</Text>
+          <Text style={styles.adviceDate}>{formatAdviceDate(item.createdAt)}</Text>
+        </View>
+      </Animated.View>
+    </View>
+  );
+}
+
 export default function ArchiveScreen() {
-  const { advice, isLoading } = useAdvice();
+  const { advice, clearAdvice, deleteAdvice, isLoading } = useAdvice();
+  const [isDeleting, setIsDeleting] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [testMessage, setTestMessage] = useState('');
+  const openSwipeableRef = useRef<SwipeableRowHandle | null>(null);
 
-  const isShowingPreview = !isLoading && advice.length === 0;
-  const displayedAdvice = isShowingPreview ? PREVIEW_ADVICE : advice;
-  const canTest = advice.length > 0 && !isLoading && !isTesting;
+  const canTest = advice.length > 0 && !isLoading && !isTesting && !isDeleting;
+  const canClear = advice.length > 0 && !isLoading && !isTesting && !isDeleting;
 
   async function handleTestNotification() {
     if (!canTest) {
@@ -69,13 +168,85 @@ export default function ArchiveScreen() {
     }
   }
 
+  async function handleDeleteAdvice(id: string) {
+    if (isDeleting || advice.length === 0) {
+      return;
+    }
+
+    setIsDeleting(true);
+    setTestMessage('');
+    openSwipeableRef.current = null;
+
+    try {
+      await deleteAdvice(id);
+      setTestMessage('Advice deleted.');
+    } catch {
+      setTestMessage('This advice could not be deleted. Please try again.');
+    } finally {
+      setIsDeleting(false);
+    }
+  }
+
+  async function clearAllAdvice() {
+    if (!canClear) {
+      return;
+    }
+
+    setIsDeleting(true);
+    setTestMessage('');
+    openSwipeableRef.current?.close();
+    openSwipeableRef.current = null;
+
+    try {
+      await clearAdvice();
+    } catch {
+      setTestMessage('Your advice could not be deleted. Please try again.');
+    } finally {
+      setIsDeleting(false);
+    }
+  }
+
+  function handleClearAllAdvice() {
+    if (!canClear) {
+      return;
+    }
+
+    Alert.alert(
+      'Delete all advice?',
+      `This will permanently delete all ${advice.length} saved ${
+        advice.length === 1 ? 'advice entry' : 'advice entries'
+      } and cancel their scheduled reminders.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete all',
+          style: 'destructive',
+          onPress: () => {
+            void clearAllAdvice();
+          },
+        },
+      ],
+    );
+  }
+
+  function handleOpenSwipeable(handle: SwipeableRowHandle) {
+    if (openSwipeableRef.current !== handle) {
+      openSwipeableRef.current?.close();
+      openSwipeableRef.current = handle;
+    }
+  }
+
   function renderAdvice({ item, index }: { item: Advice; index: number }) {
     return (
-      <View style={styles.adviceRow}>
-        <Text style={styles.rowNumber}>{(index + 1).toString().padStart(2, '0')}</Text>
-        <Text style={styles.adviceText}>{item.text}</Text>
-        <Text style={styles.adviceDate}>{formatAdviceDate(item.createdAt)}</Text>
-      </View>
+      <AdviceRow
+        canDelete={!isDeleting}
+        index={index}
+        item={item}
+        onDelete={(id) => {
+          void handleDeleteAdvice(id);
+        }}
+        onOpen={handleOpenSwipeable}
+      />
     );
   }
 
@@ -83,7 +254,7 @@ export default function ArchiveScreen() {
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <FlatList
         contentContainerStyle={styles.content}
-        data={displayedAdvice}
+        data={advice}
         keyExtractor={(item) => item.id}
         renderItem={renderAdvice}
         showsVerticalScrollIndicator={false}
@@ -119,8 +290,31 @@ export default function ArchiveScreen() {
         }
         ListEmptyComponent={
           <View style={styles.loadingRow}>
-            <Text style={styles.loadingText}>Loading advice…</Text>
+            <Text style={styles.loadingText}>
+              {isLoading ? 'Loading advice…' : 'No saved advice yet.'}
+            </Text>
           </View>
+        }
+        ListFooterComponent={
+          advice.length > 0 && !isLoading ? (
+            <View style={styles.footer}>
+              <Pressable
+                accessibilityLabel="Delete all saved advice"
+                accessibilityRole="button"
+                disabled={!canClear}
+                onPress={handleClearAllAdvice}
+                style={({ pressed }) => [
+                  styles.clearButton,
+                  !canClear && styles.clearButtonDisabled,
+                  pressed && canClear && styles.clearButtonPressed,
+                ]}
+              >
+                <Text style={styles.clearButtonText}>
+                  {isDeleting ? 'Deleting…' : 'Delete all advice'}
+                </Text>
+              </Pressable>
+            </View>
+          ) : null
         }
       />
     </SafeAreaView>
@@ -198,6 +392,29 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderTopColor: colors.line,
     borderTopWidth: StyleSheet.hairlineWidth,
+    backgroundColor: colors.canvas,
+  },
+  swipeContainer: {
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  deleteAction: {
+    bottom: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    width: 88,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.negative,
+  },
+  deleteActionPressed: {
+    opacity: 0.82,
+  },
+  deleteActionText: {
+    color: colors.white,
+    fontFamily: fonts.bodySemibold,
+    fontSize: 12,
   },
   rowNumber: {
     width: 24,
@@ -235,5 +452,28 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontFamily: fonts.body,
     fontSize: 14,
+  },
+  footer: {
+    paddingTop: 32,
+  },
+  clearButton: {
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderColor: colors.negative,
+    borderRadius: 22,
+    borderWidth: 1,
+    backgroundColor: colors.surface,
+  },
+  clearButtonDisabled: {
+    opacity: 0.45,
+  },
+  clearButtonPressed: {
+    backgroundColor: colors.accentSoft,
+  },
+  clearButtonText: {
+    color: colors.negative,
+    fontFamily: fonts.bodySemibold,
+    fontSize: 13,
   },
 });

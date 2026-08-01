@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useRef, useState } from 'react';
 import {
   Image,
   KeyboardAvoidingView,
@@ -12,20 +13,39 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { AdviceTree } from '../../components/AdviceTree';
+import { ADVICE_TREE_HEIGHT, AdviceTree } from '../../components/AdviceTree';
 import { colors, fonts } from '../../constants/theme';
-import { useAdvice } from '../../providers/AdviceProvider';
-
-const MAX_ADVICE_LENGTH = 100;
+import {
+  AdviceLimitError,
+  useAdvice,
+} from '../../providers/AdviceProvider';
+import { MAX_ADVICE_COUNT, MAX_ADVICE_LENGTH } from '../../types/advice';
 
 export default function RememberScreen() {
-  const { addAdvice, isLoading } = useAdvice();
+  const { addAdvice, advice, isLoading } = useAdvice();
   const [text, setText] = useState('');
   const [isFocused, setIsFocused] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
+  const [treeAnimationCycle, setTreeAnimationCycle] = useState(0);
+  const hasFocusedRemember = useRef(false);
 
-  const canSave = text.trim().length > 0 && !isLoading && !isSaving;
+  const hasReachedAdviceLimit = advice.length >= MAX_ADVICE_COUNT;
+  const canSave =
+    text.trim().length > 0 &&
+    !hasReachedAdviceLimit &&
+    !isLoading &&
+    !isSaving;
+
+  useFocusEffect(
+    useCallback(() => {
+      if (hasFocusedRemember.current) {
+        setTreeAnimationCycle((cycle) => cycle + 1);
+      } else {
+        hasFocusedRemember.current = true;
+      }
+    }, []),
+  );
 
   async function handleSave() {
     if (!canSave) {
@@ -51,8 +71,12 @@ export default function RememberScreen() {
       } else {
         setStatusMessage('Saved locally, but reminders could not be scheduled.');
       }
-    } catch {
-      setStatusMessage('Could not save this advice. Please try again.');
+    } catch (error) {
+      setStatusMessage(
+        error instanceof AdviceLimitError
+          ? `Your archive can hold up to ${MAX_ADVICE_COUNT} pieces of advice. Delete one before saving another.`
+          : 'Could not save this advice. Please try again.',
+      );
     } finally {
       setIsSaving(false);
     }
@@ -80,7 +104,14 @@ export default function RememberScreen() {
           </View>
 
           <View style={styles.composer}>
-            <AdviceTree />
+            {isLoading ? (
+              <View style={styles.treePlaceholder} />
+            ) : (
+              <AdviceTree
+                adviceCount={advice.length}
+                key={`advice-tree-v5-${advice.length}-${treeAnimationCycle}`}
+              />
+            )}
 
             <View
               style={[
@@ -114,6 +145,7 @@ export default function RememberScreen() {
               accessibilityHint="Stores this advice in your archive"
               accessibilityRole="button"
               disabled={!canSave}
+              hitSlop={{ top: 8, bottom: 8 }}
               onPress={handleSave}
               style={({ pressed }) => [
                 styles.saveButton,
@@ -141,9 +173,10 @@ export default function RememberScreen() {
               </View>
             </Pressable>
 
-            {statusMessage ? (
+            {statusMessage || hasReachedAdviceLimit ? (
               <Text accessibilityLiveRegion="polite" style={styles.statusMessage}>
-                {statusMessage}
+                {statusMessage ||
+                  `Your archive is full. Delete one of your ${MAX_ADVICE_COUNT} saved pieces to add another.`}
               </Text>
             ) : null}
           </View>
@@ -190,6 +223,9 @@ const styles = StyleSheet.create({
     paddingTop: 18,
     paddingBottom: 20,
   },
+  treePlaceholder: {
+    height: ADVICE_TREE_HEIGHT,
+  },
   inputContainer: {
     position: 'relative',
     minHeight: 168,
@@ -224,14 +260,14 @@ const styles = StyleSheet.create({
     opacity: 0.46,
   },
   saveButton: {
-    minHeight: 60,
+    height: 32,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 14,
-    paddingLeft: 22,
-    paddingRight: 8,
-    borderRadius: 30,
+    marginTop: 10,
+    paddingLeft: 16,
+    paddingRight: 4,
+    borderRadius: 16,
     backgroundColor: colors.ink,
   },
   saveButtonDisabled: {
@@ -243,28 +279,28 @@ const styles = StyleSheet.create({
   saveButtonText: {
     color: colors.surface,
     fontFamily: fonts.bodySemibold,
-    fontSize: 15,
+    fontSize: 12,
     letterSpacing: -0.1,
   },
   saveButtonTextDisabled: {
     color: colors.muted,
   },
   arrow: {
-    width: 44,
-    height: 44,
+    width: 24,
+    height: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 22,
+    borderRadius: 12,
     backgroundColor: colors.accent,
   },
   arrowDisabled: {
     backgroundColor: colors.disabledStrong,
   },
   arrowText: {
-    marginTop: -2,
+    marginTop: -1,
     color: colors.ink,
     fontFamily: fonts.bodyMedium,
-    fontSize: 22,
+    fontSize: 14,
   },
   arrowTextDisabled: {
     color: colors.muted,
