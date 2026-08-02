@@ -1,9 +1,11 @@
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  AppState,
   Image,
   Keyboard,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -16,6 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ADVICE_TREE_HEIGHT, AdviceTree } from '../../components/AdviceTree';
 import { colors, fonts } from '../../constants/theme';
+import { syncRandomNotifications } from '../../lib/notifications';
 import {
   AdviceLimitError,
   useAdvice,
@@ -28,10 +31,13 @@ export default function RememberScreen() {
   const [isFocused, setIsFocused] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
+  const [showNotificationSettings, setShowNotificationSettings] = useState(false);
   const [treeAnimationCycle, setTreeAnimationCycle] = useState(0);
+  const adviceRef = useRef(advice);
   const hasFocusedRemember = useRef(false);
   const inputRef = useRef<TextInput>(null);
   const scrollViewRef = useRef<ScrollView>(null);
+  const shouldRefreshNotificationsAfterSettings = useRef(false);
 
   const hasReachedAdviceLimit = advice.length >= MAX_ADVICE_COUNT;
   const canSave =
@@ -60,6 +66,81 @@ export default function RememberScreen() {
     return () => subscription.remove();
   }, [revealComposer]);
 
+  useEffect(() => {
+    adviceRef.current = advice;
+  }, [advice]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (
+        state !== 'active' ||
+        !shouldRefreshNotificationsAfterSettings.current
+      ) {
+        return;
+      }
+
+      shouldRefreshNotificationsAfterSettings.current = false;
+
+      void syncRandomNotifications(adviceRef.current, false)
+        .then((result) => {
+          if (!isMounted) {
+            return;
+          }
+
+          if (result === 'scheduled') {
+            setShowNotificationSettings(false);
+            setStatusMessage(
+              'Notifications are enabled. Daily reminders are scheduled.',
+            );
+          } else if (result === 'paused') {
+            setShowNotificationSettings(false);
+            setStatusMessage(
+              'Your advice is saved. Daily reminders are paused in Settings.',
+            );
+          } else if (result === 'permission-denied') {
+            setShowNotificationSettings(true);
+            setStatusMessage(
+              Platform.OS === 'ios'
+                ? 'Your advice was saved, but notifications are currently disabled. You can enable them in iOS Settings.'
+                : 'Your advice was saved, but notifications are currently disabled. You can enable them in app settings.',
+            );
+          }
+        })
+        .catch(() => {
+          if (isMounted) {
+            setShowNotificationSettings(true);
+            setStatusMessage(
+              Platform.OS === 'ios'
+                ? 'Your advice is saved, but notification access could not be confirmed. Check it in iOS Settings.'
+                : 'Your advice is saved, but notification access could not be confirmed. Check it in app settings.',
+            );
+          }
+        });
+    });
+
+    return () => {
+      isMounted = false;
+      subscription.remove();
+    };
+  }, []);
+
+  async function handleOpenNotificationSettings() {
+    shouldRefreshNotificationsAfterSettings.current = true;
+
+    try {
+      await Linking.openSettings();
+    } catch {
+      shouldRefreshNotificationsAfterSettings.current = false;
+      setStatusMessage(
+        Platform.OS === 'ios'
+          ? 'Could not open iOS Settings. Open Settings and select Unforget to enable notifications.'
+          : 'Could not open app settings. Open your device settings and select Unforget to enable notifications.',
+      );
+    }
+  }
+
   async function handleSave() {
     inputRef.current?.blur();
     Keyboard.dismiss();
@@ -70,6 +151,7 @@ export default function RememberScreen() {
 
     setIsSaving(true);
     setStatusMessage('');
+    setShowNotificationSettings(false);
 
     try {
       const { notificationResult } = await addAdvice(text);
@@ -77,10 +159,17 @@ export default function RememberScreen() {
       setText('');
 
       if (notificationResult === 'scheduled') {
-        setStatusMessage('Saved. A random reminder will arrive each day.');
-      } else if (notificationResult === 'permission-denied') {
+        setStatusMessage('Saved. Daily reminders are scheduled.');
+      } else if (notificationResult === 'paused') {
         setStatusMessage(
-          'Saved locally. Enable notifications in your device settings to receive reminders.',
+          'Your advice was saved. Daily reminders are paused; resume them in Settings.',
+        );
+      } else if (notificationResult === 'permission-denied') {
+        setShowNotificationSettings(true);
+        setStatusMessage(
+          Platform.OS === 'ios'
+            ? 'Your advice was saved, but notifications are currently disabled. You can enable them in iOS Settings.'
+            : 'Your advice was saved, but notifications are currently disabled. You can enable them in app settings.',
         );
       } else if (notificationResult === 'unsupported') {
         setStatusMessage('Saved locally. Notifications are available on iOS and Android.');
@@ -149,6 +238,7 @@ export default function RememberScreen() {
                 onChangeText={(nextText) => {
                   setText(nextText);
                   setStatusMessage('');
+                  setShowNotificationSettings(false);
                 }}
                 onFocus={() => {
                   setIsFocused(true);
@@ -200,10 +290,36 @@ export default function RememberScreen() {
             </Pressable>
 
             {statusMessage || hasReachedAdviceLimit ? (
-              <Text accessibilityLiveRegion="polite" style={styles.statusMessage}>
-                {statusMessage ||
-                  `Your archive is full. Delete one of your ${MAX_ADVICE_COUNT} saved pieces to add another.`}
-              </Text>
+              <View style={styles.statusArea}>
+                <Text
+                  accessibilityLiveRegion="polite"
+                  style={[
+                    styles.statusMessage,
+                    showNotificationSettings && styles.statusMessageWarning,
+                  ]}
+                >
+                  {statusMessage ||
+                    `Your archive is full. Delete one of your ${MAX_ADVICE_COUNT} saved pieces to add another.`}
+                </Text>
+
+                {showNotificationSettings ? (
+                  <Pressable
+                    accessibilityHint="Opens Unforget's notification settings"
+                    accessibilityRole="button"
+                    onPress={() => {
+                      void handleOpenNotificationSettings();
+                    }}
+                    style={({ pressed }) => [
+                      styles.settingsButton,
+                      pressed && styles.settingsButtonPressed,
+                    ]}
+                  >
+                    <Text style={styles.settingsButtonText}>
+                      {Platform.OS === 'ios' ? 'Open iOS Settings' : 'Open Settings'}
+                    </Text>
+                  </Pressable>
+                ) : null}
+              </View>
             ) : null}
           </View>
         </ScrollView>
@@ -331,13 +447,37 @@ const styles = StyleSheet.create({
   arrowTextDisabled: {
     color: colors.muted,
   },
-  statusMessage: {
+  statusArea: {
     marginTop: 14,
+    alignItems: 'center',
+  },
+  statusMessage: {
     paddingHorizontal: 12,
     color: colors.positive,
     fontFamily: fonts.body,
     fontSize: 13,
     lineHeight: 19,
     textAlign: 'center',
+  },
+  statusMessageWarning: {
+    color: colors.negative,
+  },
+  settingsButton: {
+    minHeight: 38,
+    justifyContent: 'center',
+    marginTop: 10,
+    paddingHorizontal: 16,
+    borderColor: colors.line,
+    borderRadius: 19,
+    borderWidth: 1,
+    backgroundColor: colors.surface,
+  },
+  settingsButtonPressed: {
+    backgroundColor: colors.accentSoft,
+  },
+  settingsButtonText: {
+    color: colors.ink,
+    fontFamily: fonts.bodySemibold,
+    fontSize: 12,
   },
 });

@@ -3,15 +3,19 @@ import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
 import { Advice } from '../types/advice';
+import {
+  loadReminderTimeRange,
+  ReminderTimeRange,
+} from './reminder-time-range';
+import { loadRemindersPaused } from './reminder-pause';
 
 const ANDROID_CHANNEL_ID = 'daily-advice';
 const MANAGED_NOTIFICATION_IDS_KEY = '@unforget/notification-ids/v1';
 const SCHEDULE_LENGTH_DAYS = 30;
-const DAY_START_HOUR = 9;
-const DAY_END_HOUR = 21;
 
 export type NotificationScheduleResult =
   | 'scheduled'
+  | 'paused'
   | 'permission-denied'
   | 'unsupported';
 
@@ -100,15 +104,19 @@ function getRandomAdvice(advice: Advice[]): Advice {
   return advice[Math.floor(Math.random() * advice.length)];
 }
 
-function getRandomDaytimeDate(dayOffset: number): Date {
+function getRandomDaytimeDate(
+  dayOffset: number,
+  timeRange: ReminderTimeRange,
+): Date {
   const date = new Date();
-  const availableMinutes = (DAY_END_HOUR - DAY_START_HOUR) * 60;
-  const randomMinute = Math.floor(Math.random() * availableMinutes);
+  const availableMinutes = timeRange.endMinutes - timeRange.startMinutes;
+  const reminderMinute =
+    timeRange.startMinutes + Math.floor(Math.random() * availableMinutes);
 
   date.setDate(date.getDate() + dayOffset);
   date.setHours(
-    DAY_START_HOUR + Math.floor(randomMinute / 60),
-    randomMinute % 60,
+    Math.floor(reminderMinute / 60),
+    reminderMinute % 60,
     0,
     0,
   );
@@ -137,11 +145,20 @@ async function replaceRandomNotifications(
     return 'scheduled';
   }
 
+  const remindersPaused = await loadRemindersPaused();
+
+  if (remindersPaused) {
+    await cancelManagedNotifications();
+    return 'paused';
+  }
+
   const hasPermission = await getPermission(requestPermission);
 
   if (!hasPermission) {
     return 'permission-denied';
   }
+
+  const timeRange = await loadReminderTimeRange();
 
   await cancelManagedNotifications();
 
@@ -152,7 +169,7 @@ async function replaceRandomNotifications(
       const selectedAdvice = getRandomAdvice(advice);
       const trigger: Notifications.DateTriggerInput = {
         type: Notifications.SchedulableTriggerInputTypes.DATE,
-        date: getRandomDaytimeDate(dayOffset),
+        date: getRandomDaytimeDate(dayOffset, timeRange),
       };
       const identifier = await Notifications.scheduleNotificationAsync({
         content: {
@@ -200,6 +217,12 @@ export async function scheduleTestNotification(
 ): Promise<NotificationScheduleResult> {
   if (Platform.OS === 'web') {
     return 'unsupported';
+  }
+
+  const remindersPaused = await loadRemindersPaused();
+
+  if (remindersPaused) {
+    return 'paused';
   }
 
   const hasPermission = await getPermission(true);

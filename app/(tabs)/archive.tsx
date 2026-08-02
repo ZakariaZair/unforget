@@ -3,7 +3,9 @@ import {
   Animated,
   Alert,
   FlatList,
+  Linking,
   PanResponder,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -137,6 +139,7 @@ export default function ArchiveScreen() {
   const { advice, clearAdvice, deleteAdvice, isLoading } = useAdvice();
   const [isDeleting, setIsDeleting] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
+  const [showNotificationSettings, setShowNotificationSettings] = useState(false);
   const [testMessage, setTestMessage] = useState('');
   const openSwipeableRef = useRef<SwipeableRowHandle | null>(null);
 
@@ -150,14 +153,24 @@ export default function ArchiveScreen() {
 
     setIsTesting(true);
     setTestMessage('');
+    setShowNotificationSettings(false);
 
     try {
       const result = await scheduleTestNotification(advice);
 
       if (result === 'scheduled') {
         setTestMessage('Test scheduled. It should appear in a few seconds.');
+      } else if (result === 'paused') {
+        setTestMessage(
+          'Reminders are paused. Resume them in Settings before testing.',
+        );
       } else if (result === 'permission-denied') {
-        setTestMessage('Enable notifications in your device settings, then try again.');
+        setShowNotificationSettings(true);
+        setTestMessage(
+          Platform.OS === 'ios'
+            ? 'Notifications are disabled. Enable them in iOS Settings, then tap Test again.'
+            : 'Notifications are disabled. Enable them in app settings, then tap Test again.',
+        );
       } else {
         setTestMessage('Notification testing is available on iOS and Android.');
       }
@@ -168,6 +181,18 @@ export default function ArchiveScreen() {
     }
   }
 
+  async function handleOpenNotificationSettings() {
+    try {
+      await Linking.openSettings();
+    } catch {
+      setTestMessage(
+        Platform.OS === 'ios'
+          ? 'Could not open iOS Settings. Open Settings and select Unforget to enable notifications.'
+          : 'Could not open app settings. Open your device settings and select Unforget to enable notifications.',
+      );
+    }
+  }
+
   async function handleDeleteAdvice(id: string) {
     if (isDeleting || advice.length === 0) {
       return;
@@ -175,6 +200,7 @@ export default function ArchiveScreen() {
 
     setIsDeleting(true);
     setTestMessage('');
+    setShowNotificationSettings(false);
     openSwipeableRef.current = null;
 
     try {
@@ -194,6 +220,7 @@ export default function ArchiveScreen() {
 
     setIsDeleting(true);
     setTestMessage('');
+    setShowNotificationSettings(false);
     openSwipeableRef.current?.close();
     openSwipeableRef.current = null;
 
@@ -282,9 +309,35 @@ export default function ArchiveScreen() {
             </View>
 
             {testMessage ? (
-              <Text accessibilityLiveRegion="polite" style={styles.testMessage}>
-                {testMessage}
-              </Text>
+              <View style={styles.testStatusArea}>
+                <Text
+                  accessibilityLiveRegion="polite"
+                  style={[
+                    styles.testMessage,
+                    showNotificationSettings && styles.testMessageWarning,
+                  ]}
+                >
+                  {testMessage}
+                </Text>
+
+                {showNotificationSettings ? (
+                  <Pressable
+                    accessibilityHint="Opens Unforget's notification settings"
+                    accessibilityRole="button"
+                    onPress={() => {
+                      void handleOpenNotificationSettings();
+                    }}
+                    style={({ pressed }) => [
+                      styles.settingsButton,
+                      pressed && styles.settingsButtonPressed,
+                    ]}
+                  >
+                    <Text style={styles.settingsButtonText}>
+                      {Platform.OS === 'ios' ? 'Open iOS Settings' : 'Open Settings'}
+                    </Text>
+                  </Pressable>
+                ) : null}
+              </View>
             ) : null}
           </View>
         }
@@ -378,12 +431,36 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bodySemibold,
     fontSize: 12,
   },
-  testMessage: {
+  testStatusArea: {
     marginTop: 12,
+    alignItems: 'flex-start',
+  },
+  testMessage: {
     color: colors.positive,
     fontFamily: fonts.body,
     fontSize: 12,
     lineHeight: 18,
+  },
+  testMessageWarning: {
+    color: colors.negative,
+  },
+  settingsButton: {
+    minHeight: 38,
+    justifyContent: 'center',
+    marginTop: 10,
+    paddingHorizontal: 16,
+    borderColor: colors.line,
+    borderRadius: 19,
+    borderWidth: 1,
+    backgroundColor: colors.surface,
+  },
+  settingsButtonPressed: {
+    backgroundColor: colors.accentSoft,
+  },
+  settingsButtonText: {
+    color: colors.ink,
+    fontFamily: fonts.bodySemibold,
+    fontSize: 12,
   },
   adviceRow: {
     flexDirection: 'row',

@@ -20,10 +20,10 @@ type BookTabBarProps = Parameters<
 type BookPageProps = {
   accessibilityLabel?: string;
   isFocused: boolean;
-  isLeftPage: boolean;
   label: string;
   onLongPress: () => void;
   onPress: () => void;
+  pagePosition: 'left' | 'middle' | 'right';
   reduceMotion: boolean;
 };
 
@@ -56,10 +56,10 @@ function useReduceMotionEnabled() {
 function BookPage({
   accessibilityLabel,
   isFocused,
-  isLeftPage,
   label,
   onLongPress,
   onPress,
+  pagePosition,
   reduceMotion,
 }: BookPageProps) {
   const selectionProgress = useRef(new Animated.Value(isFocused ? 1 : 0)).current;
@@ -83,7 +83,12 @@ function BookPage({
 
   const rotateZ = selectionProgress.interpolate({
     inputRange: [0, 1],
-    outputRange: isLeftPage ? ['0deg', '2.4deg'] : ['0deg', '-2.4deg'],
+    outputRange:
+      pagePosition === 'left'
+        ? ['0deg', '2.4deg']
+        : pagePosition === 'right'
+          ? ['0deg', '-2.4deg']
+          : ['0deg', '0deg'],
   });
   const translateY = selectionProgress.interpolate({
     inputRange: [0, 1],
@@ -93,6 +98,12 @@ function BookPage({
     inputRange: [0, 1],
     outputRange: [0.62, 1],
   });
+  const transformOrigin =
+    pagePosition === 'left'
+      ? 'right bottom'
+      : pagePosition === 'right'
+        ? 'left bottom'
+        : 'center bottom';
   return (
     <View
       style={[
@@ -104,7 +115,7 @@ function BookPage({
         style={[
           styles.pageLeaf,
           {
-            transformOrigin: isLeftPage ? 'right bottom' : 'left bottom',
+            transformOrigin,
             transform: [{ translateY }, { rotateZ }],
           },
         ]}
@@ -124,7 +135,11 @@ function BookPage({
           <View
             style={[
               styles.pageFace,
-              isLeftPage ? styles.leftPageFace : styles.rightPageFace,
+              pagePosition === 'left'
+                ? styles.leftPageFace
+                : pagePosition === 'right'
+                  ? styles.rightPageFace
+                  : styles.middlePageFace,
               isFocused ? styles.pageFaceSelected : styles.pageFaceIdle,
             ]}
           />
@@ -137,7 +152,7 @@ function BookPage({
           styles.pageLabelContainer,
           {
             opacity: labelOpacity,
-            transformOrigin: isLeftPage ? 'right bottom' : 'left bottom',
+            transformOrigin,
             transform: [{ translateY }, { rotateZ }],
           },
         ]}
@@ -177,7 +192,12 @@ function BookTabBar({ state, descriptors, navigation }: BookTabBarProps) {
               const isFocused = state.index === index;
               const { options } = descriptors[route.key];
               const label = typeof options.title === 'string' ? options.title : route.name;
-              const isLeftPage = index === 0;
+              const pagePosition =
+                index === 0
+                  ? 'left'
+                  : index === state.routes.length - 1
+                    ? 'right'
+                    : 'middle';
 
               function handlePress() {
                 Keyboard.dismiss();
@@ -204,11 +224,11 @@ function BookTabBar({ state, descriptors, navigation }: BookTabBarProps) {
                 <BookPage
                   accessibilityLabel={options.tabBarAccessibilityLabel}
                   isFocused={isFocused}
-                  isLeftPage={isLeftPage}
                   key={route.key}
                   label={label}
                   onLongPress={handleLongPress}
                   onPress={handlePress}
+                  pagePosition={pagePosition}
                   reduceMotion={reduceMotion}
                 />
               );
@@ -232,6 +252,7 @@ export default function TabLayout() {
     >
       <Tabs.Screen name="index" options={{ title: 'Remember' }} />
       <Tabs.Screen name="archive" options={{ title: 'Archive' }} />
+      <Tabs.Screen name="settings" options={{ title: 'Settings' }} />
     </Tabs>
   );
 }
@@ -309,7 +330,7 @@ const styles = StyleSheet.create({
   },
   pageSlot: {
     position: 'relative',
-    width: '50%',
+    flex: 1,
     height: 47,
     overflow: 'visible',
   },
@@ -364,6 +385,9 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 2,
     borderTopRightRadius: 6,
     borderBottomRightRadius: 5,
+  },
+  middlePageFace: {
+    borderRadius: 2,
   },
   pageLabelContainer: {
     position: 'absolute',
