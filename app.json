@@ -21,6 +21,10 @@
         "ITSAppUsesNonExemptEncryption": false
       }
     },
+    "web": {
+      "output": "static",
+      "favicon": "./assets/logo.png"
+    },
     "extra": {
       "router": {},
       "eas": {

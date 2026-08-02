@@ -1,7 +1,8 @@
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Image,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -29,6 +30,8 @@ export default function RememberScreen() {
   const [statusMessage, setStatusMessage] = useState('');
   const [treeAnimationCycle, setTreeAnimationCycle] = useState(0);
   const hasFocusedRemember = useRef(false);
+  const inputRef = useRef<TextInput>(null);
+  const scrollViewRef = useRef<ScrollView>(null);
 
   const hasReachedAdviceLimit = advice.length >= MAX_ADVICE_COUNT;
   const canSave =
@@ -47,7 +50,20 @@ export default function RememberScreen() {
     }, []),
   );
 
+  const revealComposer = useCallback(() => {
+    scrollViewRef.current?.scrollToEnd({ animated: true });
+  }, []);
+
+  useEffect(() => {
+    const subscription = Keyboard.addListener('keyboardDidShow', revealComposer);
+
+    return () => subscription.remove();
+  }, [revealComposer]);
+
   async function handleSave() {
+    inputRef.current?.blur();
+    Keyboard.dismiss();
+
     if (!canSave) {
       return;
     }
@@ -90,7 +106,13 @@ export default function RememberScreen() {
       >
         <ScrollView
           contentContainerStyle={styles.content}
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
           keyboardShouldPersistTaps="handled"
+          onScrollBeginDrag={() => {
+            inputRef.current?.blur();
+            Keyboard.dismiss();
+          }}
+          ref={scrollViewRef}
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.brandRow}>
@@ -128,9 +150,13 @@ export default function RememberScreen() {
                   setText(nextText);
                   setStatusMessage('');
                 }}
-                onFocus={() => setIsFocused(true)}
+                onFocus={() => {
+                  setIsFocused(true);
+                  requestAnimationFrame(revealComposer);
+                }}
                 placeholder="Write advice you want to remember…"
                 placeholderTextColor={colors.faint}
+                ref={inputRef}
                 style={styles.input}
                 textAlignVertical="top"
                 value={text}

@@ -3,6 +3,7 @@ import { ComponentProps, useEffect, useRef, useState } from 'react';
 import {
   AccessibilityInfo,
   Animated,
+  Keyboard,
   Pressable,
   StyleSheet,
   Text,
@@ -179,6 +180,8 @@ function BookTabBar({ state, descriptors, navigation }: BookTabBarProps) {
               const isLeftPage = index === 0;
 
               function handlePress() {
+                Keyboard.dismiss();
+
                 const event = navigation.emit({
                   type: 'tabPress',
                   target: route.key,
@@ -224,6 +227,7 @@ export default function TabLayout() {
       screenOptions={{
         headerShown: false,
         sceneStyle: { backgroundColor: colors.canvas },
+        tabBarHideOnKeyboard: true,
       }}
     >
       <Tabs.Screen name="index" options={{ title: 'Remember' }} />

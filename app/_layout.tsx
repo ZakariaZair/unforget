@@ -31,6 +31,8 @@ export default function RootLayout() {
       <StatusBar style="dark" />
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="privacy" options={{ headerShown: false }} />
+        <Stack.Screen name="support" options={{ headerShown: false }} />
       </Stack>
     </AdviceProvider>
   );
