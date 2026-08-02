@@ -28,7 +28,9 @@ Unforget is designed to feel private, calm, and personal: advice from your past 
 ## Screenshots
 
 <p align="center">
-  <img src="./assets/readme-screenshots/01-remember.jpg" alt="Unforget Remember screen" height="620" />
+  <img src="./assets/readme-screenshots/01-remember.jpg" alt="Unforget Remember screen" width="30%" />
   &nbsp;&nbsp;
-  <img src="./assets/app-store-screenshots/02-archive.jpg" alt="Unforget Archive screen" height="620" />
+  <img src="./assets/readme-screenshots/02-archive.jpg" alt="Unforget Archive screen" width="30%" />
+  &nbsp;&nbsp;
+  <img src="./assets/readme-screenshots/03-settings.png" alt="Unforget Settings screen" width="30%" />
 </p>
