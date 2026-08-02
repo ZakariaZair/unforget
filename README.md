@@ -12,20 +12,23 @@ It is not a task manager. There are no projects to organize or checklists to com
 
 > What do you want to remember?
 
-A thought such as “Apply before you feel completely ready” can return at a specific time, repeat on a chosen rhythm, or resurface unexpectedly over the days and weeks ahead. The complete message appears in the notification, so the advice arrives in the moment it can matter.
+A thought such as “Apply before you feel completely ready” becomes part of a private archive and can resurface through a gentle daily notification. The complete message appears in the notification, so the advice arrives in the moment it can matter.
 
 Unforget is designed to feel private, calm, and personal: advice from your past self, delivered when your future self needs it.
 
 ## The experience
 
 - Capture a piece of advice, a realization, or a message to your future self.
-- Choose an exact, repeating, or occasional moment for it to return.
-- Receive the complete thought directly in a notification.
-- Ask Unforget to remind you again.
-- Keep a personal archive of the things you never want to lose.
+- Receive a different saved thought through a local daily notification.
+- See the complete advice directly in the reminder.
+- Test a notification whenever you want.
+- Browse, manage, and clear your personal archive.
+- Keep everything on your device, without an account or tracking.
 
 ## Screenshots
 
-Product screenshots will be added as the first interface is completed.
-
-<!-- Add final app screenshots here. -->
+<p align="center">
+  <img src="./assets/readme-screenshots/01-remember.jpg" alt="Unforget Remember screen" height="620" />
+  &nbsp;&nbsp;
+  <img src="./assets/app-store-screenshots/02-archive.jpg" alt="Unforget Archive screen" height="620" />
+</p>

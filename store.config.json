@@ -29,6 +29,14 @@
     "release": {
       "automaticRelease": false
     },
+    "review": {
+      "firstName": "Zakaria",
+      "lastName": "Zair",
+      "email": "unforget.support@gmail.com",
+      "phone": "+1 418 264 7377",
+      "demoRequired": false,
+      "notes": "Unforget is a local-only personal advice reminder app. No account, demo credentials, or internet connection is required. On the Remember tab, enter advice and tap Save advice. The app requests notification permission and schedules local reminders. In Archive, tap Test to schedule a notification within a few seconds. Swipe an entry left to delete it. No user data is transmitted externally."
+    },
     "info": {
       "en-US": {
         "title": "Unforget: Advice Reminders",
